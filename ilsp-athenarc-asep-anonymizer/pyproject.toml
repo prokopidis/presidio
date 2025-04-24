@@ -16,6 +16,9 @@ fastapi = "^0.115.12"
 uvicorn = "^0.34.0"
 pytest-mock = "^3.14.0"
 regex = "^2024.11.6"
+pandas = "^2.2.3"
+ipykernel = "^6.29.5"
+dotenv = "^0.9.9"
 
 
 [build-system]
