@@ -6,7 +6,7 @@ authors = ["Prokopis Prokopidis <prokopis@athenarc.gr>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "~3.11"
 presidio-anonymizer = "^2.2.358"
 presidio-analyzer = "^2.2.358"
 faker = "^37.1.0"
@@ -19,6 +19,9 @@ regex = "^2024.11.6"
 pandas = "^2.2.3"
 ipykernel = "^6.29.5"
 dotenv = "^0.9.9"
+celery = {extras = ["redis"], version = "^5.5.2"}
+flower = "^2.0.1"
+
 
 
 [build-system]

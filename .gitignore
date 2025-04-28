@@ -91,6 +91,7 @@ env.bak/
 venv.bak/
 *venv/
 poetry.lock
+!ilsp-athenarc-asep-anonymizer/poetry.lock
 
 # Spyder project settings
 .spyderproject
