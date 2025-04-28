@@ -46,7 +46,7 @@ class PiiAnonymizer:
         models = [{"lang_code": "el", "model_name": "el"}]
         logging.info("Initializing Stanza NLP engine for Greek language.")
         stanza_el_engine = StanzaNlpEngine(models = models, 
-                                           download_if_missing=False # Remove this once we have a model for el in the main stanza repo
+                                           download_if_missing=False, # Remove this once we have a model for el in the main stanza repo
                                            )
         self.analyzer = AnalyzerEngine(nlp_engine = stanza_el_engine)     
         self.analyzer.registry.add_recognizer(EmailRecognizer(supported_language="el"))
