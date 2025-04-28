@@ -2,18 +2,19 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import StanzaNlpEngine
 from presidio_analyzer.predefined_recognizers import EmailRecognizer, PhoneRecognizer, CreditCardRecognizer, IbanRecognizer
 from presidio_anonymizer import AnonymizerEngine
+
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_anonymizer.operators import OperatorsFactory
+from ilsp_athenarc_asep_anonymizer.custom_replace import CustomReplace
+from ilsp_athenarc_asep_anonymizer.utils import match_entities
 
-crypto_key = "1l$p_@then@rc_2025"
+import regex as re
 import argparse
 import logging
-import regex as re
 import json
-import sys
 NL = "\n"
 
-logging.basicConfig(level=logging.INFO,encoding='utf-8', format='%(asctime)s,%(msecs)03d %(levelname)-8s %(message)s [%(filename)s:%(lineno)d]' ,    datefmt='%Y-%m-%d:%H:%M:%S')
+logging.basicConfig(level=logging.INFO, encoding='utf-8', format='%(asctime)s,%(msecs)03d %(levelname)-8s %(message)s [%(filename)s:%(lineno)d]', datefmt='%Y-%m-%d:%H:%M:%S')
 
 
 class PiiAnonymizer:
@@ -39,7 +40,7 @@ class PiiAnonymizer:
 
         self.operators={"PERSON": OperatorConfig("replace")}           
         self.anonymizer_engine = AnonymizerEngine()
-        #self.anonymizer_engine.add_anonymizer(InstanceCounterAnonymizer)
+        self.anonymizer_engine.add_anonymizer(CustomReplace)
 
     def analyze(self, text, language="el", entities=None, return_decision_process=True):
         return self.analyzer.analyze(
@@ -63,7 +64,8 @@ class PiiAnonymizer:
        
         if analyzer_results is None:
             analyzer_results = self.analyze(text, entities=entities)
-   
+        logging.info(f"Analyzer results: {analyzer_results}")
+        # Check if the text is empty or contains only whitespace
         anonymization_results = self.anonymizer_engine.anonymize(
             text=text,
             analyzer_results=analyzer_results,
@@ -71,42 +73,57 @@ class PiiAnonymizer:
                         "DATE_TIME": OperatorConfig("keep"),
                         "ORGANIZATION": OperatorConfig("keep"),
                         "ORG": OperatorConfig("keep"),
-                        "PERSON": OperatorConfig("replace"),
-                        "DEFAULT": OperatorConfig("replace"),
+                        "PERSON": OperatorConfig("custom_replace"),
+                        "LOCATION": OperatorConfig("custom_replace"),
+                        "DEFAULT": OperatorConfig("keep"),
             },
         )
+        analyzer_results = sorted(analyzer_results, key=lambda x: (x.start, x.end))
+        logging.debug(f"Analyzer results: {analyzer_results}")        
+        anonymization_results.items = sorted(anonymization_results.items, key=lambda x: (x.start, x.end))
 
         anonymization_results_dict = dict()
         anonymization_results_dict["full_text"] = text
         anonymization_results_dict["masked"] = anonymization_results.text
         anonymization_results_dict["spans"] = list()
+
+
         for span in anonymization_results.items:
+            if span.operator == "keep":
+                continue
             span_dict = dict()
             span_dict["entity_type"] = span.entity_type
             span_dict["entity_value"] = anonymization_results.text[span.start:span.end]
             span_dict["start"] = span.start
             span_dict["end"] = span.end
+            span_dict["operator"] = span.operator
             anonymization_results_dict["spans"].append(span_dict)
-            
+
+        anonymization_results_dict["spans"] = match_entities(text, anonymization_results.text, anonymization_results_dict["spans"])
+        for span in anonymization_results_dict["spans"]:
+            #span['entity_value'] = span["orig_text"]
+            #del span["orig_text"]
+            del span["start"]
+            del span["end"]
+
+        
         return anonymization_results_dict
 
+    def anonymize(self, text):
+        """
+        Anonymize the input text.
+        Args:
+            text (str): The input text to anonymize.
+        Returns:
+            list: A list of dictionaries containing the anonymization results for each paragraph.
+        """        
 
-
-    # def anonymize(self, text):
-    #     """
-    #     Anonymize the input text.
-    #     Args:
-    #         text (str): The input text to anonymize.
-    #     Returns:
-    #         list: A list of dictionaries containing the anonymization results for each paragraph.
-    #     """        
-
-    #     results = list()
-    #     for paragraph in text.split(NL):
-    #         if paragraph.strip():
-    #             paragraph_results = self.anonymize_paragraph(paragraph)
-    #             results.append(paragraph_results)
-    #     return results 
+        results = list()
+        for paragraph in text.split(NL):
+            if paragraph.strip():
+                paragraph_results = self.anonymize_paragraph(paragraph)
+                results.append(paragraph_results)
+        return results 
 
 
 
