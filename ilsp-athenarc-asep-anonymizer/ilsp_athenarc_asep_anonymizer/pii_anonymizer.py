@@ -115,7 +115,7 @@ class PiiAnonymizer:
                 span_dict["entity_value"] = text[analyzer_result.start:analyzer_result.end]
                 # span_dict["start"] = span.start
                 # span_dict["end"] = span.end
-                span_dict["operator"] = span.operator
+                # span_dict["operator"] = span.operator
                 span_dict["start_position"] = analyzer_result.start
                 span_dict["end_position"] = analyzer_result.end
 
