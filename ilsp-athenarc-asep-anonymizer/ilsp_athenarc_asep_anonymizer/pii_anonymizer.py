@@ -1,14 +1,16 @@
 from enum import unique
 import trace
-from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer import AnalyzerEngine, EntityRecognizer
 from presidio_analyzer.nlp_engine import StanzaNlpEngine
-from presidio_analyzer.predefined_recognizers import EmailRecognizer, PhoneRecognizer, CreditCardRecognizer, IbanRecognizer
+from presidio_analyzer.predefined_recognizers import EmailRecognizer, CreditCardRecognizer, IbanRecognizer
 from presidio_anonymizer import AnonymizerEngine, ConflictResolutionStrategy
 
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_anonymizer.operators import OperatorsFactory
-from ilsp_athenarc_asep_anonymizer.custom_replace import CustomReplace
+from ilsp_athenarc_asep_anonymizer.anonymizers.custom_replace import CustomReplace
 from ilsp_athenarc_asep_anonymizer.utils import match_entities
+from ilsp_athenarc_asep_anonymizer.recognizers.el_phone_recognizer import ElPhoneRecognizer
+
 
 import regex as re
 import argparse
@@ -28,7 +30,9 @@ class PiiAnonymizer:
                              # "ORGANIZATION", 
                              # "GPE", 
                              # "ORG", 
-                             "IBAN_CODE", "CREDIT_CARD", "PHONE_NUMBER", "EMAIL_ADDRESS"]
+                             "IBAN_CODE", "CREDIT_CARD", 
+                             "PHONE_NUMBER",                              
+                             "EMAIL_ADDRESS"]
 
 
     def __init__(self):
@@ -43,13 +47,17 @@ class PiiAnonymizer:
                                            )
         self.analyzer = AnalyzerEngine(nlp_engine = stanza_el_engine)     
         self.analyzer.registry.add_recognizer(EmailRecognizer(supported_language="el"))
-        self.analyzer.registry.add_recognizer(PhoneRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElPhoneRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(CreditCardRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(IbanRecognizer(supported_language="el"))
 
         self.analyzer.log_decision_process = False
 
-        self.operators={"PERSON": OperatorConfig("replace")}           
+        self.operators={}    
+        for entity in self.ENTITIES_TO_ANONYMIZE:   
+            if entity not in self.operators:
+                self.operators[entity] = OperatorConfig("custom_replace")
+
         self.anonymizer_engine = AnonymizerEngine()
         self.anonymizer_engine.add_anonymizer(CustomReplace)
 
@@ -71,13 +79,15 @@ class PiiAnonymizer:
 
         if not operators:
             operators = self.operators
-        for entity in self.ENTITIES_TO_ANONYMIZE:   
-            if entity not in operators:
-                operators[entity] = OperatorConfig("replace")
         operators["DEFAULT"] = OperatorConfig("keep")
 
         if analyzer_results is None:
             analyzer_results = self.analyze(text, entities=self.ENTITIES_TO_ANONYMIZE, return_decision_process=False)
+        
+        
+        # FIXME: Remove duplicates from analyzer results using better techniques
+        analyzer_results = EntityRecognizer.remove_duplicates(analyzer_results)
+        
         # Check if the text is empty or contains only whitespace
         anonymization_results = self.anonymizer_engine.anonymize(
             text=text,

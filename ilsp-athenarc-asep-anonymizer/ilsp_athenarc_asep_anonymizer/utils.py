@@ -215,6 +215,7 @@ def match_entities(original_text, masked_text, entities):
     return results
 
 
+
 # # Example usage
 # def main():
 #     original_text = ("Κατηγόρησαν τον δικηγόρο Τιερί Χερτσόγκ ότι επιχείρησε να δωροδοκήσει τον "
@@ -241,6 +242,88 @@ def match_entities(original_text, masked_text, entities):
 
 
 
-if __name__ == "__main__":
-    main()
-    test_entity_mapping()
+# if __name__ == "__main__":
+#     main()
+#     test_entity_mapping()
+
+
+import re
+
+# Assume your compiled regex patterns are defined as provided:
+PHONE1_REGEX = re.compile(r"(\+\d{1,2}[\s-])?(?!0+\s+,?$)\d{10}\s*,?")
+PHONE2_REGEX = re.compile(r"(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}")
+# PHONE3_REGEX has a leading '\s' and a capturing group around the number itself
+PHONE3_REGEX = re.compile(r"\s(\+\d{1,2}\s\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})")
+
+# Define a list of patterns and whether to use span(0) [whole match] or span(1) [group 1]
+# based on the pattern definition and desired output span.
+# PHONE3_REGEX explicitly captures the number *without* the leading space in group 1.
+patterns_config = [
+    (PHONE1_REGEX, False), # False indicates use match.span() (span(0))
+    (PHONE2_REGEX, False),
+    (PHONE3_REGEX, True)  # True indicates use match.span(1) (the first group)
+]
+
+def find_longest_pattern_matches(text: str, patterns_config: list) -> list[tuple[int, int]]:
+    """
+    Finds all matches of multiple regex patterns in a string, filters to keep
+    only the longest unique spans, and returns their offsets.
+
+    Args:
+        text: The string to scan.
+        patterns_config: A list of tuples, where each tuple contains:
+                         (compiled_regex_object, use_group1_span: bool).
+                         use_group1_span=True means use match.span(1), False means use match.span(0).
+
+    Returns:
+        A list of (start, end) tuples for the longest, unique, non-contained matches,
+        sorted by start position.
+    """
+    all_raw_matches = []
+
+    # 1. Collect all match spans from all patterns
+    for pattern, use_group1_span in patterns_config:
+        for match in pattern.finditer(text):
+            if use_group1_span:
+                # Use span of group 1, which excludes the leading whitespace in PHONE3_REGEX
+                span = match.span(1)
+            else:
+                # Use span of the whole match for other patterns
+                span = match.span()
+
+            # Only add valid spans (group 1 might not match in complex patterns,
+            # though it should for the given PHONE3_REGEX)
+            if span != (-1, -1):
+                all_raw_matches.append(span)
+
+    # Remove duplicate spans (e.g., if multiple patterns match the exact same span)
+    # Sorting here helps with the next filtering step, though not strictly required for correctness.
+    all_raw_matches = sorted(list(set(all_raw_matches)))
+
+    # 2. Filter to keep only the longest, non-contained matches
+    final_longest_matches = []
+
+    for span_i in all_raw_matches:
+        is_contained_by_longer = False
+        for span_j in all_raw_matches:
+            # Don't compare a span with itself
+            if span_i != span_j:
+                # Check if span_j starts at or before span_i AND ends at or after span_i
+                contains = span_j[0] <= span_i[0] and span_j[1] >= span_i[1]
+                # Check if span_j is strictly longer than span_i
+                strictly_longer = (span_j[1] - span_j[0]) > (span_i[1] - span_i[0])
+
+                if contains and strictly_longer:
+                    # Found a strictly longer span (span_j) that fully contains span_i.
+                    # Discard span_i.
+                    is_contained_by_longer = True
+                    break # No need to check other spans against span_i
+
+        # If span_i was not contained by any strictly longer span, keep it.
+        if not is_contained_by_longer:
+            final_longest_matches.append(span_i)
+
+    # 3. Sort the final list by start position for consistent output
+    final_longest_matches.sort()
+
+    return final_longest_matches
