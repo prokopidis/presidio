@@ -14,18 +14,20 @@ from ilsp_athenarc_asep_anonymizer.utils import find_longest_pattern_matches
 import regex as re
 
 # Assume your compiled regex patterns are defined as provided:
-PHONE1_REGEX = re.compile(r"(\+\d{1,2}[\s-])?(?!0+\s+,?$)\d{10}\s*,?")
-PHONE2_REGEX = re.compile(r"(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}")
+#PHONE1_REGEX = re.compile(r"((\+\d{1,2}[\s-])?(?!0+\s+,?$)\d{10})")
+PHONE2_REGEX = re.compile(r"((\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})")
 # PHONE3_REGEX has a leading '\s' and a capturing group around the number itself
-PHONE3_REGEX = re.compile(r"\s(\+\d{1,2}\s\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})")
+PHONE3_REGEX = re.compile(r"(\+\d{1,2}\s\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})")
+PHONE_REGEX_WORD_BOUNDARY = re.compile(r"\b(?!0+\s*$)(\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
 
 # Define a list of patterns and whether to use span(0) [whole match] or span(1) [group 1]
 # based on the pattern definition and desired output span.
 # PHONE3_REGEX explicitly captures the number *without* the leading space in group 1.
 patterns_config = [
-    (PHONE1_REGEX, False), # False indicates use match.span() (span(0))
-    (PHONE2_REGEX, False),
-    (PHONE3_REGEX, True)  # True indicates use match.span(1) (the first group)
+#    (PHONE1_REGEX, False), # False indicates use match.span() (span(0))
+    #(PHONE2_REGEX, False),
+    (PHONE_REGEX_WORD_BOUNDARY, False),  # False indicates use match.span(0)
+    #(PHONE3_REGEX, True)  # True indicates use match.span(1) (the first group)
 ]
 
 # # Example Usage with Greek text:
@@ -54,7 +56,7 @@ class ElPhoneRecognizer(LocalRecognizer):
     def __init__(
         self,
         context: Optional[List[str]] = None,
-        supported_language: str = "en",
+        supported_language: str = "el",
         # For all regions, use phonenumbers.SUPPORTED_REGIONS
         supported_regions=DEFAULT_SUPPORTED_REGIONS,
         leniency: Optional[int] = 1,

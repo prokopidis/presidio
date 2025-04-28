@@ -10,6 +10,8 @@ from presidio_anonymizer.operators import OperatorsFactory
 from ilsp_athenarc_asep_anonymizer.anonymizers.custom_replace import CustomReplace
 from ilsp_athenarc_asep_anonymizer.utils import match_entities
 from ilsp_athenarc_asep_anonymizer.recognizers.el_phone_recognizer import ElPhoneRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_address_recognizer import ElAddressRecognizer
+
 
 
 import regex as re
@@ -30,6 +32,7 @@ class PiiAnonymizer:
                              # "ORGANIZATION", 
                              # "GPE", 
                              # "ORG", 
+                             "ADDRESS",
                              "IBAN_CODE", "CREDIT_CARD", 
                              "PHONE_NUMBER",                              
                              "EMAIL_ADDRESS"]
@@ -48,6 +51,7 @@ class PiiAnonymizer:
         self.analyzer = AnalyzerEngine(nlp_engine = stanza_el_engine)     
         self.analyzer.registry.add_recognizer(EmailRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(ElPhoneRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElAddressRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(CreditCardRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(IbanRecognizer(supported_language="el"))
 
