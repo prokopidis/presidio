@@ -1,7 +1,9 @@
+from enum import unique
+import trace
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import StanzaNlpEngine
 from presidio_analyzer.predefined_recognizers import EmailRecognizer, PhoneRecognizer, CreditCardRecognizer, IbanRecognizer
-from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer import AnonymizerEngine, ConflictResolutionStrategy
 
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_anonymizer.operators import OperatorsFactory
@@ -12,13 +14,22 @@ import regex as re
 import argparse
 import logging
 import json
+import traceback
 NL = "\n"
 
 logging.basicConfig(level=logging.INFO, encoding='utf-8', format='%(asctime)s,%(msecs)03d %(levelname)-8s %(message)s [%(filename)s:%(lineno)d]', datefmt='%Y-%m-%d:%H:%M:%S')
 
 
+
 class PiiAnonymizer:
     SUPPORTED_LANG = ["el"]
+    ENTITIES_TO_ANONYMIZE = ["PERSON", "LOCATION", 
+                             # "FAC",
+                             # "ORGANIZATION", 
+                             # "GPE", 
+                             # "ORG", 
+                             "IBAN_CODE", "CREDIT_CARD", "PHONE_NUMBER", "EMAIL_ADDRESS"]
+
 
     def __init__(self):
         """This function initializes the PiiAnonymizer class. It sets up the NLP engine and the anonymizer engine.
@@ -50,7 +61,6 @@ class PiiAnonymizer:
             return_decision_process=return_decision_process,
         )
 
-
     def anonymize_paragraph(self, text, entities=None, analyzer_results=None, operators=None):
         """
         Anonymize a paragraph of text.
@@ -61,50 +71,68 @@ class PiiAnonymizer:
 
         if not operators:
             operators = self.operators
-       
+        for entity in self.ENTITIES_TO_ANONYMIZE:   
+            if entity not in operators:
+                operators[entity] = OperatorConfig("replace")
+        operators["DEFAULT"] = OperatorConfig("keep")
+
         if analyzer_results is None:
-            analyzer_results = self.analyze(text, entities=entities)
-        logging.info(f"Analyzer results: {analyzer_results}")
+            analyzer_results = self.analyze(text, entities=self.ENTITIES_TO_ANONYMIZE, return_decision_process=False)
         # Check if the text is empty or contains only whitespace
         anonymization_results = self.anonymizer_engine.anonymize(
             text=text,
             analyzer_results=analyzer_results,
-            operators=  {
-                        "DATE_TIME": OperatorConfig("keep"),
-                        "ORGANIZATION": OperatorConfig("keep"),
-                        "ORG": OperatorConfig("keep"),
-                        "PERSON": OperatorConfig("custom_replace"),
-                        "LOCATION": OperatorConfig("custom_replace"),
-                        "DEFAULT": OperatorConfig("keep"),
-            },
+            operators= operators,
+            conflict_resolution=None
         )
         analyzer_results = sorted(analyzer_results, key=lambda x: (x.start, x.end))
-        logging.debug(f"Analyzer results: {analyzer_results}")        
         anonymization_results.items = sorted(anonymization_results.items, key=lambda x: (x.start, x.end))
-
+        #logging.info(f"Analyzer results: {analyzer_results}")        
+        #logging.info(f"Anonymization results: {anonymization_results.items}")
         anonymization_results_dict = dict()
-        anonymization_results_dict["full_text"] = text
+        anonymization_results_dict["full_text"] = text    
         anonymization_results_dict["masked"] = anonymization_results.text
-        anonymization_results_dict["spans"] = list()
+        anonymization_results_dict["spans"] = list()            
+        try:
+            assert len(analyzer_results) == len(anonymization_results.items), f"Analyzer results: {analyzer_results} Anonymization results: {anonymization_results.items}"
+            for analyzer_result, span in zip(analyzer_results, anonymization_results.items):
+                span_dict = dict()
+                span_dict["entity_type"] = analyzer_result.entity_type
+                span_dict["entity_value"] = text[analyzer_result.start:analyzer_result.end]
+                # span_dict["start"] = span.start
+                # span_dict["end"] = span.end
+                span_dict["operator"] = span.operator
+                span_dict["start_position"] = analyzer_result.start
+                span_dict["end_position"] = analyzer_result.end
 
-
-        for span in anonymization_results.items:
-            if span.operator == "keep":
-                continue
-            span_dict = dict()
-            span_dict["entity_type"] = span.entity_type
-            span_dict["entity_value"] = anonymization_results.text[span.start:span.end]
-            span_dict["start"] = span.start
-            span_dict["end"] = span.end
-            span_dict["operator"] = span.operator
-            anonymization_results_dict["spans"].append(span_dict)
-
-        anonymization_results_dict["spans"] = match_entities(text, anonymization_results.text, anonymization_results_dict["spans"])
-        for span in anonymization_results_dict["spans"]:
-            #span['entity_value'] = span["orig_text"]
-            #del span["orig_text"]
-            del span["start"]
-            del span["end"]
+                anonymization_results_dict["spans"].append(span_dict)
+                
+        except AssertionError as e:
+            traceback.print_exc()
+            pass
+            # for span in anonymization_results.items:
+            #     if span.operator == "keep":
+            #         continue
+            #     span_dict = dict()
+            #     span_dict["entity_type"] = span.entity_type
+            #     span_dict["entity_value"] = anonymization_results.text[span.start:span.end]
+            #     span_dict["start"] = span.start
+            #     span_dict["end"] = span.end
+            #     span_dict["operator"] = span.operator
+            #     anonymization_results_dict["spans"].append(span_dict)
+            # # logging.info(f"Anonymization results: {anonymization_results_dict}")
+            # anonymization_results_dict["spans"] = match_entities(text, anonymization_results.text, anonymization_results_dict["spans"])            
+            # for span in anonymization_results_dict["spans"]:
+            #     if "orig_text" in span:
+            #          span['entity_value'] = span["orig_text"]
+            #          del span["orig_text"]
+            #     if "start" in span:
+            #          del span["start"]
+            #     if "end" in span:
+            #          del span["end"]
+            #     if "operator" in span:
+            #          del span["operator"]
+            
 
         
         return anonymization_results_dict
