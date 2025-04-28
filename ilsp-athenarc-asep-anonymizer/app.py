@@ -44,9 +44,16 @@ class AnonymizeRequest(BaseModel):
     :param return_decision_process: Should the decision points within the analysis returned as part of the response
     :param allow_list: List of strings to be ignored during analysis.
     """
-    text: Optional[str] = None
+    text: Optional[str] = """Ο δικηγόρος Νίκος Νικολόπουλος συνάντησε τον Παναγιώτη Παναγιωτόπουλο.
+Έκανε κατάθεση στο GR9608100010000001234567890.
+Έκανε κατάθεση στο GR96 0810 0010 0000 0123 4567 890.
+Κατοικεί στην Καλαμάτα, στην οδό Παπανικολή 56.
+Επικοινωνήστε μαζί μας τηλεφωνικά, καλώντας ΔΩΡΕΑΝ το Τμήμα Τηλεφωνικής Εξυπηρέτησης Πελατών, στο 800-900-1000 για οποιοδήποτε αίτημα ή πληροφορία.
+Για κλήσεις από το εξωτερικό μπορείτε να καλείτε στο +30 6997666262 ή στο +30 211 8675449.
+Το email του είναι stamatis.petropoulos@info.gr.
+Η διεύθυνσή του είναι Παπανικολή 56."""
     language: Optional[str] = "el"
-    entities: Optional[List[str]] = ['PERSON', 'PHONE_NUMBER', 'EMAIL_ADDRESS']
+    entities: Optional[List[str]] = ['PERSON', 'PHONE_NUMBER', 'EMAIL_ADDRESS', 'IBAN_CODE', 'ADDRESS']	
     score_threshold: Optional[float] = None
     return_decision_process: Optional[bool] = None
     allow_list: Optional[List[str]] = None
