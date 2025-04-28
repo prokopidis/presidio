@@ -1,7 +1,7 @@
 # app.py
 
 """REST API server for anonymizer."""
-
+import json
 import logging
 import os
 from logging.config import fileConfig
@@ -19,6 +19,8 @@ from ilsp_athenarc_asep_anonymizer.pii_anonymizer import PiiAnonymizer
 import regex as re
 from typing import Dict, List, Optional
 from pydantic import BaseModel
+from ilsp_athenarc_asep_anonymizer.celery import run_anonymization, celery
+from celery.result import AsyncResult
 
 DEFAULT_PORT = 3000
 LOGGING_CONF_FILE = "logging.ini"
@@ -84,11 +86,21 @@ class Server:
             if not request.text:
                 raise Exception("No text provided")
 
-            anonymizer_results = self.anonymizer.anonymize(request.text, entities=request.entities)
+            anonymization_id = run_anonymization.delay(request.text).id
 
             return Response(
-                content=anonymizer_results.to_json(), media_type="application/json"
+                content=json.dumps({"anonymization_id": anonymization_id}), media_type="application/json"
             )
+
+        @self.app.get("/anonymize/{anonymization_id}")
+        async def get_anonymization(anonymization_id) -> Response:
+            task_result = AsyncResult(anonymization_id, app=celery)
+
+            return Response(content=json.dumps({
+                "anonymization_id": anonymization_id,
+                "status": task_result.status,
+                "result": json.loads(task_result.result) if task_result.ready() else None
+            }, ensure_ascii=False), media_type="application/json")
 
 
         @self.app.exception_handler(InvalidParamError)
