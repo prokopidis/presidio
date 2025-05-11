@@ -25,6 +25,8 @@ flair = "^0.15.1"
 seaborn = "^0.13.2"
 ipywidgets = "^8.1.7"
 itables = "^2.3.0"
+argilla = "^2.8.0"
+datasets = "^3.6.0"
 
 
 
