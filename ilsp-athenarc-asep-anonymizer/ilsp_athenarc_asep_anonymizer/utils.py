@@ -1,3 +1,5 @@
+from bs4 import BeautifulSoup
+
 def enrich_entity_info(original_text: str, masked_text: str, entities: list) -> list:
     """
     Enriches entity dictionaries with information from the original text.
@@ -327,3 +329,86 @@ def find_longest_pattern_matches(text: str, patterns_config: list) -> list[tuple
     final_longest_matches.sort()
 
     return final_longest_matches
+
+
+def parse_html_to_text(html_content):
+    """
+    Parses HTML content, extracts plain text, and converts <p> and <br> to newlines,
+    preserving text within <p> tags.
+
+    Args:
+        html_content: A string containing HTML or a non-string value (like NaN).
+
+    Returns:
+        The extracted plain text string with newlines, or None if input is not valid HTML/string.
+    """
+    if pd.isna(html_content) or not isinstance(html_content, str):
+        return None # Return None for missing or non-string inputs
+
+    try:
+        # Parse the HTML content
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Insert newlines before and after <p> tags
+        for p_tag in soup.find_all('p'):
+            p_tag.insert_before('\n')
+            p_tag.insert_after('\n')
+
+        # Replace <br> tags with newlines
+        for br_tag in soup.find_all('br'):
+            br_tag.replace_with('\n')
+
+        # Get the text content, effectively removing HTML tags
+        text_content = soup.get_text()
+
+        # Replace non-breaking spaces with regular spaces
+        text_content = text_content.replace('\xa0', ' ')
+        
+        # Optional: Clean up whitespace and potential extra newlines
+        text_content = re.sub(r'\s*\n\s*', '\n', text_content).strip() # Remove whitespace around newlines
+        text_content = re.sub(r'\n+', '\n', text_content).strip()     # Remove multiple consecutive newlines
+
+        return text_content
+    except Exception as e:
+        # Handle potential parsing errors
+        print(f"Error parsing HTML content: {e}")
+        return None # Return None if parsing fails
+
+
+def paragraph_to_doc_results(paragraph_results):
+    """
+    Converts a list of paragraph dictionaries to a combined dictionary
+    with corrected span offsets.
+
+    Args:
+        paragraph_list: A list of dictionaries, where each dictionary
+                        contains 'full_text', 'masked', and 'spans' keys.
+
+    Returns:
+        A dictionary containing the combined 'full_text', 'masked_text',
+        and a list of 'spans' with corrected offsets.
+    """
+    full_text_list = [item['full_text'] for item in paragraph_results]
+    masked_text_list = [item['masked'] for item in paragraph_results]
+    spans_list = [item['spans'] for item in paragraph_results]
+
+    full_text = '\n'.join(full_text_list)
+    masked_text = '\n'.join(masked_text_list)
+
+    corrected_spans = []
+    offset = 0
+    for i, spans in enumerate(spans_list):
+        for span in spans:
+            corrected_span = span.copy()
+            corrected_span['start_position'] += offset
+            corrected_span['end_position'] += offset
+            corrected_spans.append(corrected_span)
+        if i < len(spans_list) - 1:
+            offset += len(full_text_list[i]) + 1  # Add 1 for the newline character
+
+    output_dict = {
+        'full_text': full_text,
+        'masked': masked_text,
+        'spans': corrected_spans,
+    }
+    return output_dict
