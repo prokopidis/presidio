@@ -54,13 +54,12 @@ class AnonymizeRequest(BaseModel):
     # context: Optional[Dict[str, str]] = None
     # :param ad_hoc_recognizers: List of ad-hoc recognizer dictionaries.
     # :param context: Contextual information for analysis.
-    #allow_list_match: str = "exact"
+    # allow_list_match: str = "exact"
     #: param allow_list_match: Matching strategy for the allow list ('exact' or 'regex').
     # regex_flags: int = re.DOTALL | re.MULTILINE | re.IGNORECASE
     # :param regex_flags: Regex flags to be used for pattern recognizers.
     # :param correlation_id: cross call ID for this request
     # correlation_id: Optional[str] = None
-    
 
 
 class Server:
@@ -86,6 +85,11 @@ class Server:
             if not request.text:
                 raise Exception("No text provided")
 
+            self.logger.info(
+                f'Received anonymization request for text:\n\n'
+                f'{request.text if len(request.text) < 4 * 80 else request.text[:4 * 80 - 3] + "..."}'
+            )
+
             anonymization_id = run_anonymization.delay(request.text).id
 
             return Response(
@@ -102,10 +106,9 @@ class Server:
                 "result": json.loads(task_result.result) if task_result.ready() else None
             }, ensure_ascii=False), media_type="application/json")
 
-
         @self.app.exception_handler(InvalidParamError)
         async def invalid_param_exception_handler(
-            request: Request, exc: InvalidParamError
+                request: Request, exc: InvalidParamError
         ):
             self.logger.warning(
                 f"Request failed with parameter validation error: {exc.err_msg}"
@@ -138,14 +141,14 @@ def create_app():
     server = Server()
     return server.app
 
-app = create_app()
 
+app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", DEFAULT_PORT))
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
-
 
 # logging.basicConfig(level=logging.INFO)
 # logger = logging.getLogger(__name__)
