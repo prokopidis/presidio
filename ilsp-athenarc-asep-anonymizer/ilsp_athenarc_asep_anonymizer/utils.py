@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+import pandas as pd
 
 def enrich_entity_info(original_text: str, masked_text: str, entities: list) -> list:
     """
@@ -412,3 +413,54 @@ def paragraph_to_doc_results(paragraph_results):
         'spans': corrected_spans,
     }
     return output_dict
+
+
+def remove_overlapping_entities(entities):
+    """
+    Checks for overlapping entities in a list and removes the shorter one.
+
+    Args:
+        entities: A list of dictionaries, where each dictionary represents an entity
+                  and has 'start', 'end', and 'entity_type' keys.
+
+    Returns:
+        A new list of entities with no overlaps.
+    """
+    sorted_entities = sorted(entities, key=lambda x: x['start'])
+    non_overlapping_entities = []
+    i = 0
+    while i < len(sorted_entities):
+        current_entity = sorted_entities[i]
+        next_i = i + 1
+        while next_i < len(sorted_entities):
+            next_entity = sorted_entities[next_i]
+            if current_entity['end'] > next_entity['start']:
+                # Overlap detected
+                len_current = current_entity['end'] - current_entity['start']
+                len_next = next_entity['end'] - next_entity['start']
+
+                if len_current > len_next:
+                    # Keep the current, discard the next
+                    next_i += 1
+                elif len_next > len_current:
+                    # Discard the current, move to the next
+                    current_entity = next_entity
+                    next_i += 1
+                else:  # Same length
+                    if current_entity['start'] < next_entity['start']:
+                        # Keep the current, discard the next
+                        next_i += 1
+                    elif next_entity['start'] < current_entity['start']:
+                        # Discard the current, move to the next
+                        current_entity = next_entity
+                        next_i += 1
+                    else:  # Same start and end
+                        # Discard the next
+                        next_i += 1
+            else:
+                # No overlap, move to the next entity
+                break
+        non_overlapping_entities.append(current_entity)
+        i = next_i
+
+    return non_overlapping_entities
