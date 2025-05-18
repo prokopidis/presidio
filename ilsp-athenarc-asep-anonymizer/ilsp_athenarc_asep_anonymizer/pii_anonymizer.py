@@ -36,6 +36,7 @@ class PiiAnonymizer:
                              "IBAN_CODE", "CREDIT_CARD", 
                              "PHONE_NUMBER",                              
                              "EMAIL_ADDRESS"]
+    ENTITIES_TO_ANALYZE = ENTITIES_TO_ANONYMIZE  
 
 
     def __init__(self):
@@ -86,7 +87,7 @@ class PiiAnonymizer:
         operators["DEFAULT"] = OperatorConfig("keep")
 
         if analyzer_results is None:
-            analyzer_results = self.analyze(text, entities=self.ENTITIES_TO_ANONYMIZE, return_decision_process=False)
+            analyzer_results = self.analyze(text, entities=self.ENTITIES_TO_ANALYZE, return_decision_process=False)
         
         
         # FIXME: Remove duplicates from analyzer results using better techniques
@@ -108,7 +109,13 @@ class PiiAnonymizer:
         anonymization_results_dict["masked"] = anonymization_results.text
         anonymization_results_dict["spans"] = list()            
         try:
-            assert len(analyzer_results) == len(anonymization_results.items), f"Analyzer results: {analyzer_results} Anonymization results: {anonymization_results.items}"
+            try:
+                assert len(analyzer_results) == len(anonymization_results.items)
+            except:
+                logging.warning(f"Different length of analyzer and anonymization results: {len(analyzer_results)} {len(anonymization_results.items)} ")
+                logging.warning(f"Text: {text}")
+                logging.warning(f"analyzer results: {analyzer_results} Anonymization results: {anonymization_results.items}")
+
             for analyzer_result, span in zip(analyzer_results, anonymization_results.items):
                 span_dict = dict()
                 span_dict["entity_type"] = analyzer_result.entity_type
