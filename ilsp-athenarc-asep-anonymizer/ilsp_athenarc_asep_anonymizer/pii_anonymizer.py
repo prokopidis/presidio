@@ -11,7 +11,13 @@ from ilsp_athenarc_asep_anonymizer.anonymizers.custom_replace import CustomRepla
 from ilsp_athenarc_asep_anonymizer.utils import match_entities
 from ilsp_athenarc_asep_anonymizer.recognizers.el_phone_recognizer import ElPhoneRecognizer
 from ilsp_athenarc_asep_anonymizer.recognizers.el_address_recognizer import ElAddressRecognizer
-
+from ilsp_athenarc_asep_anonymizer.recognizers.el_date_recognizer import ElDateRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_address_recognizer import ElAddressRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_adt_recognizer import ElAdtRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_afm_recognizer import ElAfmRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_amka_recognizer import ElAmkaRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_protocol_number_recognizer import ElProtocolNumberRecognizer
+from ilsp_athenarc_asep_anonymizer.recognizers.el_am_recognizer import ElAmRecognizer
 
 
 import regex as re
@@ -34,6 +40,7 @@ class PiiAnonymizer:
                              # "ORG", 
                              "ADDRESS",
                              "IBAN_CODE", "CREDIT_CARD", 
+                             "DATE","AFM", "AMKA", "ADT", "AM", "PROTOCOL_NUMBER",                             
                              "PHONE_NUMBER",                              
                              "EMAIL_ADDRESS"]
     ENTITIES_TO_ANALYZE = ENTITIES_TO_ANONYMIZE  
@@ -53,8 +60,15 @@ class PiiAnonymizer:
         self.analyzer.registry.add_recognizer(EmailRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(ElPhoneRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(ElAddressRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElDateRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(CreditCardRecognizer(supported_language="el"))
         self.analyzer.registry.add_recognizer(IbanRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElAdtRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElAfmRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElAmkaRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElAmRecognizer(supported_language="el"))
+        self.analyzer.registry.add_recognizer(ElProtocolNumberRecognizer(supported_language="el"))
+
 
         self.analyzer.log_decision_process = False
 
@@ -112,9 +126,9 @@ class PiiAnonymizer:
             try:
                 assert len(analyzer_results) == len(anonymization_results.items)
             except:
-                logging.warning(f"Different length of analyzer and anonymization results: {len(analyzer_results)} {len(anonymization_results.items)} ")
-                logging.warning(f"Text: {text}")
-                logging.warning(f"analyzer results: {analyzer_results} Anonymization results: {anonymization_results.items}")
+                logging.debug(f"Different length of analyzer and anonymization results: {len(analyzer_results)} {len(anonymization_results.items)} ")
+                logging.debug(f"Text: {text}")
+                logging.debug(f"analyzer results: {analyzer_results} Anonymization results: {anonymization_results.items}")
 
             for analyzer_result, span in zip(analyzer_results, anonymization_results.items):
                 span_dict = dict()
