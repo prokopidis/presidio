@@ -10,6 +10,7 @@ import pydicom
 from matplotlib import pyplot as plt  # necessary import for PIL typing # noqa: F401
 from PIL import Image, ImageOps
 from presidio_analyzer import PatternRecognizer
+from pydicom.multival import MultiValue
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 
 from presidio_image_redactor import (
@@ -486,7 +487,7 @@ class DicomImageRedactorEngine(ImageRedactorEngine):
             raise ValueError("Enter a positive value for padding")
         elif padding_width >= 100:
             raise ValueError(
-                "Excessive padding width entered. Please use a width under 100 pixels."  # noqa: E501
+                "Excessive padding width entered. Please use a width under 100 pixels."
             )
 
         # Select most common color as border color
@@ -646,18 +647,29 @@ class DicomImageRedactorEngine(ImageRedactorEngine):
     def _process_names(cls, text_metadata: list, is_name: list) -> list:
         """Process names to have multiple iterations in our PHI list.
 
-        :param metadata_text: List of all the instance's element values
+        :param text_metadata: List of all the instance's element values
         (excluding pixel data).
         :param is_name: True if the element is specified as being a name.
 
-        :return: Metadata text with additional name iterations appended.
+        :return: List of PHI strings for elements where is_name is True,
+        with additional name augmentations appended.
         """
-        phi_list = text_metadata.copy()
+        phi_list = []
 
         for i in range(0, len(text_metadata)):
             if is_name[i] is True:
-                original_text = str(text_metadata[i])
-                phi_list += cls.augment_word(original_text)
+                value = text_metadata[i]
+                # Flatten MultiValue/list/tuple into individual elements
+                items = (
+                    value
+                    if isinstance(value, (MultiValue, list, tuple))
+                    else [value]
+                )
+                for item in items:
+                    text = str(item).strip()
+                    if text:
+                        phi_list.append(text)
+                        phi_list += cls.augment_word(text)
 
         return phi_list
 
@@ -681,7 +693,11 @@ class DicomImageRedactorEngine(ImageRedactorEngine):
         is_name: List[bool],
         is_patient: List[bool],
     ) -> list:
-        """Make the list of PHI to use in Presidio ad-hoc recognizer.
+        """Build a list of PHI strings for the ad-hoc recognizer.
+
+        Combines names and patient-related fields, adds generic PHI, flattens nested
+        collections, stringifies, trims empties, and de-duplicates while preserving
+        order of first appearance.
 
         :param original_metadata: List of all the instance's element values
         (excluding pixel data).
@@ -691,26 +707,37 @@ class DicomImageRedactorEngine(ImageRedactorEngine):
 
         :return: List of PHI (str) to use with Presidio ad-hoc recognizer.
         """
-        # Process names
-        phi_list = cls._process_names(original_metadata, is_name)
+        # 1) Base PHI via existing helpers
+        phi: list = []
+        phi.extend(cls._process_names(original_metadata, is_name))
+        phi.extend(cls._process_names(original_metadata, is_patient))
+        phi = cls._add_known_generic_phi(phi)
 
-        # Add known potential phi values
-        phi_list = cls._add_known_generic_phi(phi_list)
+        # 2) Flatten safely (MultiValue/list/tuple) and stringify
+        flattened: list = []
+        for val in phi:
+            if isinstance(val, (MultiValue, list, tuple)):
+                for item in val:
+                    if item is None:
+                        continue
+                    s = str(item).strip()
+                    if s:
+                        flattened.append(s)
+            else:
+                if val is None:
+                    continue
+                s = str(val).strip()
+                if s:
+                    flattened.append(s)
 
-        # Flatten any nested lists
-        for phi in phi_list:
-            if type(phi) in [pydicom.multival.MultiValue, list, tuple]:
-                for item in phi:
-                    phi_list.append(item)
-                phi_list.remove(phi)
-
-        # Convert all items to strings
-        phi_str_list = [str(phi) for phi in phi_list]
-
-        # Remove duplicates
-        phi_str_list = list(set(phi_str_list))
-
-        return phi_str_list
+        # 3) Stable de-duplication
+        seen = set()
+        out: list = []
+        for s in flattened:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
 
     @classmethod
     def _set_bbox_color(

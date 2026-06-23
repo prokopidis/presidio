@@ -5,12 +5,12 @@ from tests import assert_result_within_score_range
 
 
 @pytest.fixture(scope="module")
-def recognizer():
+def recognizer() -> ItDriverLicenseRecognizer:
     return ItDriverLicenseRecognizer()
 
 
 @pytest.fixture(scope="module")
-def entities():
+def entities() -> list[str]:
     return ["IT_DRIVER_LICENSE"]
 
 
@@ -25,10 +25,16 @@ def entities():
         2,
         ((0, 10), (15, 25),),
         ((0.1, 0.4), (0.1, 0.4),),),
-        # Test with old Driver License
-        ("U1H00A000B", 1, ((0, 10),), ((0.1, 0.4),),),
+        # Test with valid duplicate Driver License
+        ("U1H00B000C", 1, ((0, 10),), ((0.1, 0.4),),),
+        # Test with invalid duplicate Driver License
+        ("U1H00A000B", 0, (), (),),
         # Test with invalid Driver License
         ("990123456B", 0, (), (),),
+        # Test with JK letters in license (issue #1555)
+        ("U1K711J11M", 1, ((0, 10),), ((0.1, 0.4),),),
+        # Test with JK letters not at start of string
+        ("license U1K711J11M here", 1, ((8, 18),), ((0.1, 0.4),),),
         # fmt: on
     ],
 )
@@ -40,7 +46,7 @@ def test_when_driver_licenses_in_text_then_all_it_driver_licenses_found(
     recognizer,
     entities,
     max_score,
-):
+) -> None:
     results = recognizer.analyze(text, entities)
     assert len(results) == expected_len
     for res, (st_pos, fn_pos), (st_score, fn_score) in zip(

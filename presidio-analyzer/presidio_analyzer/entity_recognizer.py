@@ -1,9 +1,11 @@
 import logging
 from abc import abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional, Tuple
 
 from presidio_analyzer import RecognizerResult
-from presidio_analyzer.nlp_engine import NlpArtifacts
+
+if TYPE_CHECKING:
+    from presidio_analyzer.nlp_engine import NlpArtifacts
 
 logger = logging.getLogger("presidio-analyzer")
 
@@ -22,15 +24,26 @@ class EntityRecognizer:
     :param supported_entities: the entities supported by this recognizer
     (for example, phone number, address, etc.)
     :param supported_language: the language supported by this recognizer.
-    The supported langauge code is iso6391Name
+    The supported language code is iso6391Name
     :param name: the name of this recognizer (optional)
     :param version: the recognizer current version
     :param context: a list of words which can help boost confidence score
     when they appear in context of the matched entity
+    :param country_code: Optional ISO 3166-1 alpha-2 country tag. Custom
+        recognizers may set it per instance; predefined recognizers should
+        prefer the class-level :attr:`COUNTRY_CODE`. Values are stripped,
+        lower-cased, and must match :attr:`COUNTRY_CODE` when both are set.
     """
 
     MIN_SCORE = 0
     MAX_SCORE = 1.0
+    #: Canonical class-level country tag. Subclasses override on the class
+    #: itself (e.g. ``COUNTRY_CODE = "us"``) and predefined country
+    #: recognizers always declare it this way. Custom recognizers without
+    #: a subclass can pass ``country_code=`` to the constructor instead;
+    #: read both via the :meth:`country_code` / :meth:`is_country_specific`
+    #: instance methods.
+    COUNTRY_CODE: ClassVar[Optional[str]] = None
 
     def __init__(
         self,
@@ -39,6 +52,7 @@ class EntityRecognizer:
         supported_language: str = "en",
         version: str = "0.0.1",
         context: Optional[List[str]] = None,
+        country_code: Optional[str] = None,
     ):
         self.supported_entities = supported_entities
 
@@ -54,9 +68,85 @@ class EntityRecognizer:
         self.is_loaded = False
         self.context = context if context else []
 
+        self._country_code = self._resolve_country_code(country_code)
+
         self.load()
         logger.info("Loaded recognizer: %s", self.name)
         self.is_loaded = True
+
+    @classmethod
+    def _resolve_country_code(cls, passed: Optional[str]) -> Optional[str]:
+        """Reconcile a constructor-passed country code with the class attribute.
+
+        Implements the two-path tagging matrix: the class-level
+        :attr:`COUNTRY_CODE` is the canonical declaration for predefined
+        recognizers, and the constructor kwarg is the path for custom
+        recognizers (typically routed through ``from_dict`` from YAML).
+        Both can be set as long as they agree; conflicting values raise
+        ``ValueError`` so a Polish tax-ID recognizer can't be silently
+        re-tagged as British, regardless of which path the misconfiguration
+        comes from.
+
+        :param passed: The value supplied to ``__init__`` (already typed
+            as ``Optional[str]``).
+        :return: The lower-cased, stripped country code stored on the
+            instance, or ``None`` for locale-agnostic recognizers.
+        :raises TypeError: If ``passed`` is set but is not a string.
+        :raises ValueError: If ``passed`` is blank, or if it disagrees
+            with a class-level :attr:`COUNTRY_CODE`.
+        """
+        class_code = cls.COUNTRY_CODE
+        normalized_class = (
+            class_code.lower() if isinstance(class_code, str) else class_code
+        )
+
+        if passed is None:
+            return normalized_class
+
+        if not isinstance(passed, str):
+            raise TypeError(
+                f"country_code must be a string or None, got "
+                f"{type(passed).__name__}: {passed!r}."
+            )
+        trimmed = passed.strip()
+        if not trimmed:
+            raise ValueError(
+                f"country_code must be a non-empty string; got {passed!r}."
+            )
+        normalized_passed = trimmed.lower()
+
+        if normalized_class is not None and normalized_passed != normalized_class:
+            raise ValueError(
+                f"country_code={passed!r} conflicts with class-level "
+                f"{cls.__name__}.COUNTRY_CODE={class_code!r}. The class "
+                f"attribute is the canonical declaration; pass the matching "
+                f"value or omit ``country_code=`` entirely."
+            )
+
+        return normalized_passed
+
+    def country_code(self) -> Optional[str]:
+        """Return the country tag for this recognizer, or ``None`` if generic.
+
+        Resolved at construction time from the class-level
+        :attr:`COUNTRY_CODE` attribute and the optional ``country_code``
+        constructor kwarg; the two are reconciled by
+        :meth:`_resolve_country_code` so this method always returns a
+        single, lower-cased value (or ``None``). Note this is an instance
+        method — to introspect a class without instantiating, read
+        ``cls.COUNTRY_CODE`` directly.
+        """
+        return self._country_code
+
+    def is_country_specific(self) -> bool:
+        """Return ``True`` iff this recognizer is tagged with a country.
+
+        Equivalent to ``self.country_code() is not None``. Provided as a
+        named predicate because filter / registry / discoverability code
+        reads more naturally with an explicit "is this country-specific?"
+        question than with a None-check.
+        """
+        return self.country_code() is not None
 
     @property
     def id(self):
@@ -74,7 +164,7 @@ class EntityRecognizer:
 
     @abstractmethod
     def analyze(
-        self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts
+        self, text: str, entities: List[str], nlp_artifacts: "NlpArtifacts"
     ) -> List[RecognizerResult]:
         """
         Analyze text to identify entities.
@@ -92,7 +182,7 @@ class EntityRecognizer:
         text: str,
         raw_recognizer_results: List[RecognizerResult],
         other_raw_recognizer_results: List[RecognizerResult],
-        nlp_artifacts: NlpArtifacts,
+        nlp_artifacts: "NlpArtifacts",
         context: Optional[List[str]] = None,
     ) -> List[RecognizerResult]:
         """Enhance confidence score using context of the entity.
@@ -152,6 +242,8 @@ class EntityRecognizer:
             "name": self.name,
             "version": self.version,
         }
+        if self._country_code is not None:
+            return_dict["country_code"] = self._country_code
         return return_dict
 
     @classmethod

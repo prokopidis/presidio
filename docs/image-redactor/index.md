@@ -80,6 +80,9 @@ Pre-requisites:
     
     # Redact the image with pink color
     redacted_image = engine.redact(image, (255, 192, 203))
+
+    # Optional: Redact the image and return redacted regions
+    redacted_image, bboxes = engine.redact_and_return_bbox(image, (255, 192, 203))
     
     # save the redacted image 
     redacted_image.save("new_image.png")
@@ -156,6 +159,19 @@ The most basic usage of the engine can be setup like the following in python
 
 ```
 diOCR = DocumentIntelligenceOCR(endpoint="<your_endpoint>", key="<your_key>")
+```
+
+If your environment uses Azure Identity instead of API keys, pass an Azure SDK
+credential that implements `TokenCredential`, such as `DefaultAzureCredential`.
+For example, install `azure-identity` and use `DefaultAzureCredential`:
+
+```
+from azure.identity import DefaultAzureCredential
+
+diOCR = DocumentIntelligenceOCR(
+    endpoint="<your_endpoint>",
+    credential=DefaultAzureCredential(),
+)
 ```
 
 The DocumentIntelligenceOCR can also attempt to pull your endpoint and key values from environment variables.  

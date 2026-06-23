@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+from presidio_analyzer.input_validation import ConfigurationValidator
 from presidio_analyzer.nlp_engine import NlpEngine, NlpEngineProvider
 from presidio_analyzer.recognizer_registry import RecognizerRegistryProvider
 
@@ -29,6 +30,13 @@ class AnalyzerEngineProvider:
         nlp_engine_conf_file: Optional[Union[Path, str]] = None,
         recognizer_registry_conf_file: Optional[Union[Path, str]] = None,
     ):
+        if analyzer_engine_conf_file:
+            ConfigurationValidator.validate_file_path(analyzer_engine_conf_file)
+        if nlp_engine_conf_file:
+            ConfigurationValidator.validate_file_path(nlp_engine_conf_file)
+        if recognizer_registry_conf_file:
+            ConfigurationValidator.validate_file_path(recognizer_registry_conf_file)
+
         self.configuration = self.get_configuration(conf_file=analyzer_engine_conf_file)
         self.nlp_engine_conf_file = nlp_engine_conf_file
         self.recognizer_registry_conf_file = recognizer_registry_conf_file
@@ -36,7 +44,7 @@ class AnalyzerEngineProvider:
     def get_configuration(
         self, conf_file: Optional[Union[Path, str]]
     ) -> Union[Dict[str, Any]]:
-        """Retrieve the analyzer engine configuration from the provided file."""
+        """Retrieve analyzer engine configuration from the provided file."""
 
         if not conf_file:
             default_conf_file = self._get_full_conf_path()
@@ -59,9 +67,14 @@ class AnalyzerEngineProvider:
                 with open(self._get_full_conf_path()) as file:
                     configuration = yaml.safe_load(file)
             except Exception:
-                print(f"Failed to parse file {conf_file}, resorting to default")
+                logger.warning(
+                    f"Failed to parse file {conf_file}, resorting to default"
+                )
                 with open(self._get_full_conf_path()) as file:
                     configuration = yaml.safe_load(file)
+
+        ConfigurationValidator.validate_analyzer_configuration(configuration)
+        logger.debug("Analyzer configuration validation passed")
 
         return configuration
 
@@ -94,15 +107,15 @@ class AnalyzerEngineProvider:
         supported_languages: List[str],
         nlp_engine: NlpEngine,
     ) -> RecognizerRegistry:
-        if self.recognizer_registry_conf_file:
-            logger.info(
-                f"Reading recognizer registry "
-                f"configuration from {self.recognizer_registry_conf_file}"
-            )
-            provider = RecognizerRegistryProvider(
-                conf_file=self.recognizer_registry_conf_file, nlp_engine=nlp_engine
-            )
-        elif "recognizer_registry" in self.configuration:
+        """Load recognizer registry.
+
+        Inline ``recognizer_registry`` section in the analyzer conf takes
+        priority over a separately provided per-section file so that a unified
+        ANALYZER_CONF_FILE is self-contained and is not silently overridden by
+        a per-section file that was baked into the image as a Dockerfile default.
+        A per-section file is only used when no inline section is present.
+        """
+        if "recognizer_registry" in self.configuration:
             registry_configuration = self.configuration["recognizer_registry"]
             provider = RecognizerRegistryProvider(
                 registry_configuration={
@@ -110,6 +123,14 @@ class AnalyzerEngineProvider:
                     "supported_languages": supported_languages,
                 },
                 nlp_engine=nlp_engine,
+            )
+        elif self.recognizer_registry_conf_file:
+            logger.info(
+                f"Reading recognizer registry "
+                f"configuration from {self.recognizer_registry_conf_file}"
+            )
+            provider = RecognizerRegistryProvider(
+                conf_file=self.recognizer_registry_conf_file, nlp_engine=nlp_engine
             )
         else:
             logger.warning(
@@ -129,12 +150,20 @@ class AnalyzerEngineProvider:
         return registry
 
     def _load_nlp_engine(self) -> NlpEngine:
-        if self.nlp_engine_conf_file:
-            logger.info(f"Reading nlp configuration from {self.nlp_engine_conf_file}")
-            provider = NlpEngineProvider(conf_file=self.nlp_engine_conf_file)
-        elif "nlp_configuration" in self.configuration:
+        """Load NLP engine.
+
+        Inline ``nlp_configuration`` section in the analyzer conf takes
+        priority over a separately provided per-section file so that a unified
+        ANALYZER_CONF_FILE is self-contained and is not silently overridden by
+        a per-section file that was baked into the image as a Dockerfile default.
+        A per-section file is only used when no inline section is present.
+        """
+        if "nlp_configuration" in self.configuration:
             nlp_configuration = self.configuration["nlp_configuration"]
             provider = NlpEngineProvider(nlp_configuration=nlp_configuration)
+        elif self.nlp_engine_conf_file:
+            logger.info(f"Reading nlp configuration from {self.nlp_engine_conf_file}")
+            provider = NlpEngineProvider(conf_file=self.nlp_engine_conf_file)
         else:
             logger.warning(
                 "configuration file is missing for 'nlp_configuration'."

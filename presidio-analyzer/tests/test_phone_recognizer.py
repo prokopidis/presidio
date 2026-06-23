@@ -1,12 +1,14 @@
 import pytest
 
-from presidio_analyzer.predefined_recognizers.phone_recognizer import PhoneRecognizer
+from presidio_analyzer.predefined_recognizers.generic.phone_recognizer import PhoneRecognizer
 from tests import assert_result, assert_result_with_textual_explanation
 
 
 @pytest.fixture(scope="module")
 def recognizer():
-    return PhoneRecognizer()
+    return PhoneRecognizer(
+        supported_regions=PhoneRecognizer.DEFAULT_SUPPORTED_REGIONS + ("JP", "CN")
+    )
 
 
 
@@ -24,6 +26,8 @@ def recognizer():
         ("_: +55 11 98456 5666", 1, ["PHONE_NUMBER"], ((3, 20), ), 0.4),
         ("Brazil: +55 11 98456 5666", 1, ["PHONE_NUMBER"], ((8, 25), ), 0.4),
         ("BR: +55 11 98456 5666", 1, ["PHONE_NUMBER"], ((4, 21), ), 0.4),
+        ("My Japanese number is 090-1234-5678", 1, ["PHONE_NUMBER"],((22, 35), ), 0.4),
+        ("My CN number is 13812345678", 1, ["PHONE_NUMBER"],((16, 27), ), 0.4),
         # fmt: on
     ],
 )
@@ -112,6 +116,10 @@ def test_when_phone_with_leniency_then_succeed(
          2, ["PHONE_NUMBER", "PHONE_NUMBER"],
          ((16, 30), (60, 76),), 0.4, 
          ['Recognized as US region phone number, using PhoneRecognizer','Recognized as GR region phone number, using PhoneRecognizer']),
+         ("My US number is (415) 555-0132, and my international one is +33 1 42 68 53 00",
+         2, ["PHONE_NUMBER", "PHONE_NUMBER"],
+         ((16, 30), (60, 77),), 0.4,
+         ['Recognized as US region phone number, using PhoneRecognizer','Recognized as FR region phone number, using PhoneRecognizer']),
         # fmt: on
     ],
 )
@@ -136,3 +144,13 @@ def test_get_analysis_explanation():
     test_region = "US"
     explanation = phone_recognizer._get_analysis_explanation(test_region)
     assert explanation.recognizer == "PhoneRecognizer"
+
+def test_get_supported_entities():
+    default_phone_recognizer = PhoneRecognizer()
+    default_supported_entities = default_phone_recognizer.get_supported_entities()
+    assert default_supported_entities == ["PHONE_NUMBER"]
+
+    entity_name = "TELEPHONE_OR_FAX"
+    configured_phone_recognizer = PhoneRecognizer(supported_entity=entity_name)
+    configured_supported_entities = configured_phone_recognizer.get_supported_entities()
+    assert configured_supported_entities == [entity_name]
